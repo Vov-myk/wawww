@@ -1,33 +1,21 @@
 export default {
   async fetch(request) {
-    // 只处理 WebSocket 升级请求
+    // 检查请求头，确认这是一个 WebSocket 升级请求
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader !== 'websocket') {
       return new Response('Expected WebSocket', { status: 400 });
     }
 
-    // 建立 WebSocket 连接
+    // 创建 WebSocket 连接对
     const [client, server] = Object.values(new WebSocketPair());
     server.accept();
 
-    // 存储所有连接的客户端
-    const clients = new Set();
-    clients.add(server);
-
-    // 收到消息时广播给所有客户端（包括发送者自己，但前端可以去重）
+    // 当收到消息时，原样返回给客户端 (回声功能)
     server.addEventListener('message', (event) => {
-      clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(event.data);
-        }
-      });
+      server.send(event.data);
     });
 
-    // 客户端断开时清理
-    server.addEventListener('close', () => {
-      clients.delete(server);
-    });
-
+    // 返回 101 状态码，表示协议切换成功
     return new Response(null, { status: 101, webSocket: client });
   }
 };
