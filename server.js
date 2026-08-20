@@ -1,28 +1,33 @@
-const WebSocket = require('ws');
+export default {
+  async fetch(request) {
+    // 只处理 WebSocket 升级请求
+    const upgradeHeader = request.headers.get('Upgrade');
+    if (upgradeHeader !== 'websocket') {
+      return new Response('Expected WebSocket', { status: 400 });
+    }
 
-// 监听 Render 分配的环境变量 PORT
-const wss = new WebSocket.Server({ port: process.env.PORT || 8080 });
+    // 建立 WebSocket 连接
+    const [client, server] = Object.values(new WebSocketPair());
+    server.accept();
 
-const clients = new Set();
+    // 存储所有连接的客户端
+    const clients = new Set();
+    clients.add(server);
 
-wss.on('connection', (ws) => {
-    console.log('新客户端连接');
-    clients.add(ws);
-
-    ws.on('message', (message) => {
-        console.log('收到消息:', message.toString());
-        // 广播给所有客户端
-        clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(message.toString());
-            }
-        });
+    // 收到消息时广播给所有客户端（包括发送者自己，但前端可以去重）
+    server.addEventListener('message', (event) => {
+      clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(event.data);
+        }
+      });
     });
 
-    ws.on('close', () => {
-        clients.delete(ws);
-        console.log('客户端断开');
+    // 客户端断开时清理
+    server.addEventListener('close', () => {
+      clients.delete(server);
     });
-});
 
-console.log('WebSocket 服务器已启动，端口:', process.env.PORT || 8080);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+};
